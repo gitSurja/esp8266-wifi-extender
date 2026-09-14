@@ -1,4 +1,3 @@
-ADC_MODE(ADC_VCC);
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <EEPROM.h>
@@ -25,14 +24,6 @@ int activeApChannel = 0;
 String staSsid = "MIS";
 String staPass = "CHANGE_ME";
 String apSsid = "MIS_EXT";
-
-int warningLevel() {
-  uint16_t vcc = ESP.getVcc();
-  if (vcc && vcc < 3000) return 3;
-  if (WiFi.status() == WL_CONNECTED && WiFi.RSSI() < -75) return 2;
-  if (ESP.getFreeHeap() < 10000) return 2;
-  return 0;
-}
 
 void loadCredentials() {
   EEPROM.begin(EEPROM_SIZE);
@@ -88,7 +79,7 @@ String page() {
 .pill{border-radius:20px;padding:8px 13px;font-weight:700;background:#eef1f5}.up{color:#08794f;background:#c9f5e3}.down{color:#a72335;background:#fde0e5}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:var(--card);border:1px solid #cfd5dc;border-radius:5px;padding:16px;margin-bottom:0;box-shadow:0 1px 2px #00000008}.metric b{display:block;font-size:28px;margin-top:8px}.metric span{color:#222;font-weight:700}.wide{grid-column:span 2}.chart{height:170px;width:100%;display:block}.devchart{width:180px;height:40px;border:1px solid #e1e5ea;border-radius:4px;background:#f8fafc;vertical-align:middle}.links{display:flex;flex-wrap:wrap;gap:10px}.links a,.links button{color:#fff;text-decoration:none;background:#151a22;padding:10px 14px;border-radius:4px;border:0;font:inherit;cursor:pointer}table{width:100%;border-collapse:collapse}td,th{text-align:left;border-bottom:1px solid var(--line);padding:10px 5px;font-size:13px}th{color:var(--muted);background:#f5f6f8}
 @media(max-width:800px){main{padding:15px}.grid{grid-template-columns:repeat(2,1fr)}.wide{grid-column:span 2}.top{align-items:flex-start;flex-direction:column}}
 </style></head><body><div class='layout'><main><div class='top'><div><h1>MIS_EXT Control</h1><div class='muted'>ESP8266 NAPT range extender</div></div><div id='state' class='pill'>Checking...</div></div>
-<div class='grid'><div class='card metric'><span>Uplink signal</span><b id='rssi'>--</b></div><div class='card metric'><span>Connected clients</span><b id='clients'>--</b></div><div class='card metric'><span>Free heap</span><b id='heap'>--</b></div><div class='card metric'><span>3.3V rail</span><b id='vcc'>--</b></div><div class='card metric'><span>Uptime</span><b id='uptime'>--</b></div>
+<div class='grid'><div id='vcc' style='display:none'></div><div class='card metric'><span>Uplink signal</span><b id='rssi'>--</b></div><div class='card metric'><span>Connected clients</span><b id='clients'>--</b></div><div class='card metric'><span>Free heap</span><b id='heap'>--</b></div><div class='card metric'><span>Uptime</span><b id='uptime'>--</b></div>
 <div class='card wide'><h2>Uplink signal history <span class='muted'>(dBm)</span></h2><canvas id='rssiChart' class='chart'></canvas><div class='muted'>Y-axis: signal strength in dBm. Closer to 0 is better.</div></div>
 <div class='card wide'><h2>Free memory history <span class='muted'>(bytes)</span></h2><canvas id='heapChart' class='chart'></canvas><div class='muted'>Y-axis: free heap in bytes.</div></div>
 <div class='card wide'><h2>Network details</h2><table><tr><th>Uplink</th><td id='sta'>--</td></tr><tr><th>Extender</th><td id='ap'>--</td></tr><tr><th>Channel</th><td id='channel'>--</td></tr><tr><th>Gateway</th><td id='gateway'>--</td></tr></table></div>
@@ -112,7 +103,6 @@ String statusJson() {
   s += ",\"rssi\":" + String(WiFi.RSSI()) + ",\"channel\":" + String(WiFi.channel());
   s += ",\"gateway\":\"" + WiFi.gatewayIP().toString() + "\",\"clients\":" + String(WiFi.softAPgetStationNum());
   s += ",\"heap\":" + String(ESP.getFreeHeap()) + ",\"uptime\":" + String(millis() / 1000);
-  s += ",\"vcc\":" + String(ESP.getVcc()) + ",\"warning\":" + String(warningLevel());
   String rows = clientRows();
   rows.replace("'", "\\\"");
   s += ",\"devices\":\"" + rows + "\"}";
@@ -130,7 +120,7 @@ void setup() {
   WiFi.setAutoReconnect(true);
   WiFi.setOutputPower(20.5);
   // 11b maximizes beacon compatibility in AP+STA mode.
-  WiFi.setPhyMode(WIFI_PHY_MODE_11B);
+  WiFi.setPhyMode(WIFI_PHY_MODE_11G);
   // Avoid modem-sleep latency while the extender is actively forwarding.
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
   loadCredentials();
@@ -207,7 +197,7 @@ void loop() {
     WiFi.begin(staSsid.c_str(), staPass.c_str());
   }
   // Built-in blue LED: fast blink for uplink/warning, breathe while idle.
-  if (millis() < builtinTestUntil || WiFi.status() != WL_CONNECTED || warningLevel() > 0) {
+  if (millis() < builtinTestUntil || WiFi.status() != WL_CONNECTED) {
     static unsigned long bt = 0;
     static bool on = false;
     if (millis() - bt > 250) {
