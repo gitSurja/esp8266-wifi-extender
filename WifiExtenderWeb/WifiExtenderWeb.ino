@@ -206,7 +206,7 @@ void loop() {
     WiFi.disconnect();
     WiFi.begin(staSsid.c_str(), staPass.c_str());
   }
-  // Built-in LED: blink while the uplink is down, off when connected.
+  // Built-in blue LED: fast blink for uplink/warning, breathe while idle.
   if (millis() < builtinTestUntil || WiFi.status() != WL_CONNECTED || warningLevel() > 0) {
     static unsigned long bt = 0;
     static bool on = false;
@@ -215,8 +215,19 @@ void loop() {
       on = !on;
       digitalWrite(LED_BUILTIN, on ? LOW : HIGH);
     }
+  } else if (WiFi.softAPgetStationNum() == 0) {
+    static int breath = 0;
+    static int breathDirection = 1;
+    static unsigned long breathAt = 0;
+    if (millis() - breathAt >= 20) {
+      breathAt = millis();
+      breath += breathDirection * 4;
+      if (breath >= 255) { breath = 255; breathDirection = -1; }
+      if (breath <= 0) { breath = 0; breathDirection = 1; }
+      analogWrite(LED_BUILTIN, 1023 - breath * 4); // active-low LED
+    }
   } else {
-    digitalWrite(LED_BUILTIN, HIGH);
+    analogWrite(LED_BUILTIN, 1023); // off while a client is connected
   }
   // GPIO16: one blink on disconnect, two fast blinks on connect.
   static int previousClients = -1;
