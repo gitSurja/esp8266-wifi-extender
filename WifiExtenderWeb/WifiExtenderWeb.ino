@@ -129,7 +129,8 @@ void setup() {
   WiFi.mode(WIFI_AP_STA);
   WiFi.setAutoReconnect(true);
   WiFi.setOutputPower(20.5);
-  WiFi.setPhyMode(WIFI_PHY_MODE_11N);
+  // 11b maximizes beacon compatibility in AP+STA mode.
+  WiFi.setPhyMode(WIFI_PHY_MODE_11B);
   // Avoid modem-sleep latency while the extender is actively forwarding.
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
   loadCredentials();
@@ -160,6 +161,12 @@ void setup() {
   Serial.printf("STA CH:%d RSSI:%d -> starting AP on same CH\n", ch, WiFi.RSSI());
   WiFi.softAPConfig(IPAddress(192,168,5,1), IPAddress(192,168,5,1), IPAddress(255,255,255,0));
   bool apOk = WiFi.softAP(apSsid.c_str(), AP_PASS, ch, 0, 4);
+  softap_config apConfig;
+  if (wifi_softap_get_config(&apConfig)) {
+    apConfig.ssid_hidden = 0;
+    apConfig.beacon_interval = 100;
+    wifi_softap_set_config_current(&apConfig);
+  }
   Serial.printf("softAP ok=%d CH=%d IP:", apOk, ch);
   Serial.println(WiFi.softAPIP().toString());
   Serial.printf("AP MAC: %s\n", WiFi.softAPmacAddress().c_str());
