@@ -19,6 +19,8 @@ volatile unsigned long builtinTestUntil = 0;
 volatile int eventTestPulses = 0;
 bool eventTestOn = false;
 unsigned long eventTestAt = 0;
+unsigned long lastReconnectAttempt = 0;
+int activeApChannel = 0;
 String staSsid = "MIS";
 String staPass = "CHANGE_ME";
 String apSsid = "MIS_EXT";
@@ -116,6 +118,8 @@ void setup() {
   Serial.println("\nMIS Extender + Web starting...");
   WiFi.mode(WIFI_AP_STA);
   WiFi.setAutoReconnect(true);
+  WiFi.setOutputPower(20.5);
+  WiFi.setPhyMode(WIFI_PHY_MODE_11N);
   // Avoid modem-sleep latency while the extender is actively forwarding.
   WiFi.setSleepMode(WIFI_NONE_SLEEP);
   loadCredentials();
@@ -141,9 +145,8 @@ void setup() {
   auto& dhcp = WiFi.softAPDhcpServer();
   if (WiFi.status() == WL_CONNECTED) dhcp.setDns(WiFi.dnsIP(0));
   WiFi.mode(WIFI_AP_STA);
-  WiFi.setOutputPower(20.5);
-  WiFi.setPhyMode(WIFI_PHY_MODE_11N);
   int ch = (WiFi.status() == WL_CONNECTED) ? WiFi.channel() : 1;
+  activeApChannel = ch;
   Serial.printf("STA CH:%d RSSI:%d -> starting AP on same CH\n", ch, WiFi.RSSI());
   WiFi.softAPConfig(IPAddress(192,168,5,1), IPAddress(192,168,5,1), IPAddress(255,255,255,0));
   bool apOk = WiFi.softAP(apSsid.c_str(), AP_PASS, ch, 0, 4);
@@ -180,6 +183,12 @@ void setup() {
 
 void loop() {
   server.handleClient();
+  // Recover the uplink without rebooting or interrupting the web server.
+  if (WiFi.status() != WL_CONNECTED && millis() - lastReconnectAttempt > 10000) {
+    lastReconnectAttempt = millis();
+    WiFi.disconnect();
+    WiFi.begin(staSsid.c_str(), staPass.c_str());
+  }
   // Built-in LED: blink while the uplink is down, off when connected.
   if (millis() < builtinTestUntil || WiFi.status() != WL_CONNECTED) {
     static unsigned long bt = 0;
