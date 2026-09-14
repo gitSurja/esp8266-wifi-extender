@@ -1,3 +1,4 @@
+ADC_MODE(ADC_VCC);
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <EEPROM.h>
@@ -24,6 +25,14 @@ int activeApChannel = 0;
 String staSsid = "MIS";
 String staPass = "CHANGE_ME";
 String apSsid = "MIS_EXT";
+
+int warningLevel() {
+  uint16_t vcc = ESP.getVcc();
+  if (vcc && vcc < 3000) return 3;
+  if (WiFi.status() == WL_CONNECTED && WiFi.RSSI() < -75) return 2;
+  if (ESP.getFreeHeap() < 10000) return 2;
+  return 0;
+}
 
 void loadCredentials() {
   EEPROM.begin(EEPROM_SIZE);
@@ -79,7 +88,7 @@ String page() {
 .pill{border-radius:20px;padding:8px 13px;font-weight:700;background:#eef1f5}.up{color:#08794f;background:#c9f5e3}.down{color:#a72335;background:#fde0e5}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.card{background:var(--card);border:1px solid #cfd5dc;border-radius:5px;padding:16px;margin-bottom:0;box-shadow:0 1px 2px #00000008}.metric b{display:block;font-size:28px;margin-top:8px}.metric span{color:#222;font-weight:700}.wide{grid-column:span 2}.chart{height:170px;width:100%;display:block}.devchart{width:180px;height:40px;border:1px solid #e1e5ea;border-radius:4px;background:#f8fafc;vertical-align:middle}.links{display:flex;flex-wrap:wrap;gap:10px}.links a,.links button{color:#fff;text-decoration:none;background:#151a22;padding:10px 14px;border-radius:4px;border:0;font:inherit;cursor:pointer}table{width:100%;border-collapse:collapse}td,th{text-align:left;border-bottom:1px solid var(--line);padding:10px 5px;font-size:13px}th{color:var(--muted);background:#f5f6f8}
 @media(max-width:800px){main{padding:15px}.grid{grid-template-columns:repeat(2,1fr)}.wide{grid-column:span 2}.top{align-items:flex-start;flex-direction:column}}
 </style></head><body><div class='layout'><main><div class='top'><div><h1>MIS_EXT Control</h1><div class='muted'>ESP8266 NAPT range extender</div></div><div id='state' class='pill'>Checking...</div></div>
-<div class='grid'><div class='card metric'><span>Uplink signal</span><b id='rssi'>--</b></div><div class='card metric'><span>Connected clients</span><b id='clients'>--</b></div><div class='card metric'><span>Free heap</span><b id='heap'>--</b></div><div class='card metric'><span>Uptime</span><b id='uptime'>--</b></div>
+<div class='grid'><div class='card metric'><span>Uplink signal</span><b id='rssi'>--</b></div><div class='card metric'><span>Connected clients</span><b id='clients'>--</b></div><div class='card metric'><span>Free heap</span><b id='heap'>--</b></div><div class='card metric'><span>3.3V rail</span><b id='vcc'>--</b></div><div class='card metric'><span>Uptime</span><b id='uptime'>--</b></div>
 <div class='card wide'><h2>Uplink signal history <span class='muted'>(dBm)</span></h2><canvas id='rssiChart' class='chart'></canvas><div class='muted'>Y-axis: signal strength in dBm. Closer to 0 is better.</div></div>
 <div class='card wide'><h2>Free memory history <span class='muted'>(bytes)</span></h2><canvas id='heapChart' class='chart'></canvas><div class='muted'>Y-axis: free heap in bytes.</div></div>
 <div class='card wide'><h2>Network details</h2><table><tr><th>Uplink</th><td id='sta'>--</td></tr><tr><th>Extender</th><td id='ap'>--</td></tr><tr><th>Channel</th><td id='channel'>--</td></tr><tr><th>Gateway</th><td id='gateway'>--</td></tr></table></div>
@@ -90,10 +99,10 @@ String page() {
   s += R"rawliteral(/'>MIS_EXT dashboard</a><a href='http://)rawliteral";
   s += WiFi.localIP().toString();
   s += R"rawliteral(/'>MIS dashboard</a></div><p class='muted'>MIS_EXT / 88888888</p></div><div class='card wide'><h2>LED test</h2><p class='muted'>Run a short test without stopping the extender.</p><div class='links'><button onclick="testLed('uplink')">Test built-in LED</button><button onclick="testLed('event')">Test GPIO16 LED</button></div></div></div>
-<script>const hist={r:[],h:[]};function $(x){return document.getElementById(x)}function fmt(s){return s<3600?Math.floor(s/60)+'m '+s%60+'s':Math.floor(s/3600)+'h '+Math.floor(s%3600/60)+'m'}
+ <script>const hist={r:[],h:[]};function $(x){return document.getElementById(x)}function fmt(s){return s<3600?Math.floor(s/60)+'m '+s%60+'s':Math.floor(s/3600)+'h '+Math.floor(s%3600/60)+'m'}
 function draw(id,a,color){let c=$(id),x=c.getContext('2d'),d=devicePixelRatio||1,w=c.clientWidth,h=c.clientHeight;c.width=w*d;c.height=h*d;x.scale(d,d);x.clearRect(0,0,w,h);if(a.length<2)return;let lo=Math.min(...a),hi=Math.max(...a);if(hi==lo){hi++;lo--}let L=38,R=8,T=8,B=22,pw=w-L-R,ph=h-T-B;x.font='11px system-ui';x.fillStyle='#8fa2bd';x.fillText(Math.round(hi),2,T+5);x.fillText(Math.round(lo),2,h-B);x.fillText('0s',L,h-5);x.fillText(Math.max(0,(a.length-1)*3)+'s',w-30,h-5);x.strokeStyle='#263650';x.beginPath();x.moveTo(L,T);x.lineTo(L,h-B);x.lineTo(w-R,h-B);x.stroke();x.strokeStyle=color;x.lineWidth=2;x.beginPath();a.forEach((v,i)=>{let px=L+i*pw/(a.length-1),py=T+ph-(v-lo)*ph/(hi-lo);i?x.lineTo(px,py):x.moveTo(px,py)});x.stroke()}
  let devHist={};function testLed(which){fetch('/api/led?which='+which).then(()=>alert('LED test started'))}function mini(){document.querySelectorAll('.devchart').forEach(c=>{let k=c.dataset.mac,a=devHist[k]||[];a.push(1);if(a.length>20)a.shift();devHist[k]=a;let x=c.getContext('2d'),w=c.width,h=c.height;x.clearRect(0,0,w,h);x.strokeStyle='#263650';x.beginPath();x.moveTo(0,h-1);x.lineTo(w,h-1);x.stroke();x.strokeStyle='#42d392';x.lineWidth=2;x.beginPath();a.forEach((v,i)=>{let p=i*w/19,y=h-5-v*(h-10);i?x.lineTo(p,y):x.moveTo(p,y)});x.stroke()})}
-async function refresh(){try{let r=await fetch('/api/status',{cache:'no-store'}),j=await r.json();let ok=j.sta==3;$('state').textContent=ok?'UPLINK CONNECTED':'UPLINK OFFLINE';$('state').className='pill '+(ok?'up':'down');$('rssi').textContent=ok?j.rssi+' dBm':'offline';$('clients').textContent=j.clients;$('heap').textContent=j.heap+' B';$('uptime').textContent=fmt(j.uptime);$('sta').textContent=ok?j.staIp:'Disconnected';$('ap').textContent=j.apIp;$('channel').textContent=j.channel;$('gateway').textContent=j.gateway;hist.r.push(j.rssi);hist.h.push(j.heap);if(hist.r.length>60)hist.r.shift(),hist.h.shift();draw('rssiChart',hist.r,'#62a8ff');draw('heapChart',hist.h,'#42d392');$('devices').innerHTML=j.devices||'<tr><td colspan="4">No devices connected</td></tr>';mini()}catch(e){$('state').textContent='DASHBOARD OFFLINE';$('state').className='pill down'}}refresh();setInterval(refresh,3000);</script></main></body></html>)rawliteral";
+ async function refresh(){try{let r=await fetch('/api/status',{cache:'no-store'}),j=await r.json();let ok=j.sta==3;$('state').textContent=j.warning?'WARNING: CHECK SYSTEM':(ok?'UPLINK CONNECTED':'UPLINK OFFLINE');$('state').className='pill '+(j.warning?'down':(ok?'up':'down'));$('rssi').textContent=ok?j.rssi+' dBm':'offline';$('clients').textContent=j.clients;$('heap').textContent=j.heap+' B';$('vcc').textContent=(j.vcc/1000).toFixed(2)+' V';$('uptime').textContent=fmt(j.uptime);$('sta').textContent=ok?j.staIp:'Disconnected';$('ap').textContent=j.apIp;$('channel').textContent=j.channel;$('gateway').textContent=j.gateway;hist.r.push(j.rssi);hist.h.push(j.heap);if(hist.r.length>60)hist.r.shift(),hist.h.shift();draw('rssiChart',hist.r,'#62a8ff');draw('heapChart',hist.h,'#42d392');$('devices').innerHTML=j.devices||'<tr><td colspan="4">No devices connected</td></tr>';mini()}catch(e){$('state').textContent='DASHBOARD OFFLINE';$('state').className='pill down'}}refresh();setInterval(refresh,3000);</script></main></body></html>)rawliteral";
   return s;
 }
 
@@ -103,6 +112,7 @@ String statusJson() {
   s += ",\"rssi\":" + String(WiFi.RSSI()) + ",\"channel\":" + String(WiFi.channel());
   s += ",\"gateway\":\"" + WiFi.gatewayIP().toString() + "\",\"clients\":" + String(WiFi.softAPgetStationNum());
   s += ",\"heap\":" + String(ESP.getFreeHeap()) + ",\"uptime\":" + String(millis() / 1000);
+  s += ",\"vcc\":" + String(ESP.getVcc()) + ",\"warning\":" + String(warningLevel());
   String rows = clientRows();
   rows.replace("'", "\\\"");
   s += ",\"devices\":\"" + rows + "\"}";
@@ -190,7 +200,7 @@ void loop() {
     WiFi.begin(staSsid.c_str(), staPass.c_str());
   }
   // Built-in LED: blink while the uplink is down, off when connected.
-  if (millis() < builtinTestUntil || WiFi.status() != WL_CONNECTED) {
+  if (millis() < builtinTestUntil || WiFi.status() != WL_CONNECTED || warningLevel() > 0) {
     static unsigned long bt = 0;
     static bool on = false;
     if (millis() - bt > 250) {
